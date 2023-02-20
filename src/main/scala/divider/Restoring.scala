@@ -21,20 +21,20 @@ object Restoring {
         res
     }
 
-    // input1.length = 2n - 1, 0 <= input1 <= 2^{2n} - 1
+    // input1.length = 2n - 1, 0 <= input1 <= 2^{2n - 1} - 1
     // input2.length = n, 0 <= input2 <= 2^{n} - 1
     // input1 = input2 * Q + R 
     def RestoringDividerUnsign(len: Int, input1: BigInt, input2: BigInt): BigInt = {
       // require(0 <= input1 && input1 <= 2.pow(2*len) - 1 && 0 <= input2 && input2 <= 2.pow(len) - 1)
       // require(input1.length <= (2*len - 1) && input2.length <= len)
-      require(len <= 128 && len > 0 && input1 >= 0 && input1 <= pow2(2 * len) - 1 && input2 > 0 && input2 <= pow2(len) - 1)
+      require(len <= 128 && len > 0 && input1 >= 0 && input1 <= pow2(2 * len - 1) - 1 && input2 > 0 && input2 <= pow2(len) - 1)
 
       val n = len
       // val n = 4
       var R = input1
       val D = input2
       // val q = new Array[Int](n)
-      // val R = new Array[Int](n + 1)val in1 = input1.
+      // val R = new Array[Int](n + 1)
       // val q = new Array[Int](n)
       // val R = new Array[Int](n + 1)
 
