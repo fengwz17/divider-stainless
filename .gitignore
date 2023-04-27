@@ -346,3 +346,5 @@ hs_err_pid*
 project
 stainless
 all_log
+tip-sessions
+smt-sessions
