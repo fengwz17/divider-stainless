@@ -1,8 +1,8 @@
 package divider
 
-import stainless.collection._
-import stainless.lang._
-import stainless.math.BitVectors._
+// import stainless.collection._
+// import stainless.lang._
+// import stainless.math.BitVectors._
 
 object Restoring {
   def main(args: Array[String]): Unit = {
@@ -45,31 +45,41 @@ object Restoring {
   def RestoringDividerUnsign(len: BigInt, input1: BigInt, input2: BigInt): (BigInt, BigInt) = {
     require(len >= 1 && input1 >= 0 && input1 < input2 * Pow2(len) && input2 > 0 && input2 < Pow2(len))
 
-    val n = len
-    val D = input2
-
+    // val n = len
+    // val n = 4
     var R = input1
+    // var lshift = Pow2(2, n)
+    // var lshift = Pow2
 
-    var q = BigInt(0)
+    // val k = Pow2(2, n - 1)
+    // assert(lshift == 2 * k)
+    // assert(lshift > 0)
+    
+    // var D = lshift * input2
+
+    var Q = BigInt(0)
 
     // pre-condition => invariant
     // invariant hold in loop
     // invariant \wedge \neg loop-condition => res
     // invariant include j, Q, R, when exit loop (j = 0)
-    var j = n
-    // var Qbit = BigInt(0)
-    // var lshift = Pow2(j)
+    var j = len
+    var Qbit = BigInt(0)
+    var lshift = Pow2(j)
     (while (j >= BigInt(1)) {
       j = j - 1
-      val Qbit = Mux(R < D * Pow2(j), BigInt(0), BigInt(1))   
-      q = q + Qbit * Pow2(j)
-      R = R - Mux(Qbit, D * Pow2(j), BigInt(0))
-    }) invariant(j >= 0 && R < input2 * Pow2(j) && R >= 0 && R == input1 - input2 * q) 
+      lshift = lshift / 2 
+      // lshift = Pow2(2, j - 1)
+      // var D = input2 * lshift
+      Qbit = Mux(R >= input2 * lshift, BigInt(1), BigInt(0))   
+      R = R - Qbit * input2 * lshift
+      // if (R >= input2 * Pow2(2, j)) 
+      //   R = R - input2 * Pow2(2, j)
+      Q = Q + Qbit * lshift
+    }) // invariant(j >= 0 && R < input2 * lshift && R >= 0 && R == input1 - input2 * Q && lshift == Pow2(j)) 
     
     // val diff = input1 - input2 * Q - R
     // diff验证
-    val outQ = q
-    val outR = R
-    (outQ, outR)
+    (Q, R)
   } ensuring (res => res._2 >= 0 && res._2 < input2 && input1 == input2 * res._1 + res._2)
 }
