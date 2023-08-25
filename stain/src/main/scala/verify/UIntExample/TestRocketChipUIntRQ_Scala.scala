@@ -6,169 +6,119 @@ import stainless.equations._
 import stainless.annotation._
 import stainless.proof.check
 
-case class DividerInputs(
-    io_in_ready: Bool,
-    io_in_valid: Bool,
-    io_in_bits: Array[UInt],
-    io_sign: Bool,
-    io_out_ready: Bool,
-    io_out_valid: Bool
+case class Inputs(
+    io_in1: UInt,
+    io_in2: UInt
 )
 
-case class DividerOutputs(
-    io_out_bits: UInt,
-    io_out_valid: Bool,
-    io_in_ready: Bool
+case class Outputs(
+    io_outQ: UInt,
+    io_outR: UInt
 )
 
-case class DividerRegs(
+case class Regs(
     state: UInt,
-    shiftReg: UInt,
-    aSignReg: Bool,
-    qSignReg: Bool,
-    bReg: UInt,
-    aValx2Reg: UInt,
+    R: UInt,
+    Q: UInt,
     cnt: UInt
 )
 
 case class TestRocketChipUIntRQ(len: BigInt = 64) {
-  def inputsRequire(inputs: DividerInputs): Boolean = inputs match {
-    case DividerInputs(io_in_ready, io_in_valid, io_in_bits, io_sign, io_out_ready, io_out_valid) =>
-      len >= 0 &&
-      io_in_bits.length == 2 &&
-      io_in_bits(0).width == len &&
-      io_in_bits(1).width == len
+  def inputsRequire(inputs: Inputs): Boolean = inputs match {
+    case Inputs(io_in1, io_in2) =>
+      len >= 1 &&
+      io_in1.width == len &&
+      io_in2.width == len
   }
-  def outputsRequire(outputs: DividerOutputs): Boolean = outputs match {
-    case DividerOutputs(io_out_bits, io_out_valid, io_in_ready) =>
-      io_out_bits.width == len * 2
+  def outputsRequire(outputs: Outputs): Boolean = outputs match {
+    case Outputs(io_outQ, io_outR) =>
+      io_outQ.width == len &&
+      io_outR.width == len
   }
-  def regsRequire(regs: DividerRegs): Boolean = regs match {
-    case DividerRegs(state, shiftReg, aSignReg, qSignReg, bReg, aValx2Reg, cnt) =>
-      state.width == 3 &&
-      shiftReg.width == 1 + len * 2 &&
-      bReg.width == len &&
-      aValx2Reg.width == len + 1 &&
-      cnt.width == bitLength(len)
+  def regsRequire(regs: Regs): Boolean = {
+      regs.state.width == 2 &&
+      regs.R.width == 2 * len &&
+      regs.Q.width == len &&
+      regs.cnt.width == len
   }
-
-  // user defined function
 
   // One clock cycle
-  def trans(inputs: DividerInputs, regs: DividerRegs): (DividerOutputs, DividerRegs) = {
+  def trans(inputs: Inputs, regs: Regs): (Outputs, Regs) = {
     require(inputsRequire(inputs) && regsRequire(regs))
 
-    (inputs, regs) match {
-      case (
-            DividerInputs(io_in_ready, io_in_valid, io_in_bits, io_sign, io_out_ready, io_out_valid),
-            DividerRegs(state, shiftReg, aSignReg, qSignReg, bReg, aValx2Reg, cnt)
-          ) =>
-        // output
-        var io_out_bits  = UInt.empty(len * 2)
-        var io_out_valid = Bool.empty()
-        var io_in_ready  = Bool.empty()
-        // reg next
-        var state_next     = state
-        var shiftReg_next  = shiftReg
-        var aSignReg_next  = aSignReg
-        var qSignReg_next  = qSignReg
-        var bReg_next      = bReg
-        var aValx2Reg_next = aValx2Reg
-        var cnt_next       = cnt
+    // (inputs, regs) match {
+    //   case (
+    //         DividerInputs(io_in_ready, io_in_valid, io_in_bits, io_sign, io_out_ready, io_out_valid),
+    //         DividerRegs(state, shiftReg, aSignReg, qSignReg, bReg, aValx2Reg, cnt)
+    //       ) =>
 
-        // Enum(5)
-        val s_idle    = Lit(0, 3).U
-        val s_log2    = Lit(1, 3).U
-        val s_shift   = Lit(2, 3).U
-        val s_compute = Lit(3, 3).U
-        val s_finish  = Lit(4, 3).U
+    // output
+    var io_outR  = UInt.empty(len)
+    var io_outQ = UInt.empty(len)
 
-        val newReq = (state === s_idle) && (io_in_ready && io_in_valid)
+    // reg next
+    var state_next     = regs.state
+    var R_next         = regs.R
+    var Q_next         = regs.Q
+    var cnt_next       = regs.cnt
 
-        val (a, b) = (io_in_bits(0), io_in_bits(1))
-        val divBy0 = b === Lit(0, len).U
+    val cnt = regs.cnt
+    val R = regs.R
+    val Q = regs.Q
+    val state = regs.state
 
-        val hi = shiftReg(len * 2, len)
-        val lo = shiftReg(len - 1, 0)
+    // Enum(3)
+    val (s_init, s_compute, s_finish) = (Lit(0, 2).U, Lit(1, 2).U, Lit(2, 2).U)
+    
+    if (when(state === s_init)) {
+      R_next := inputs.io_in1
+      Q_next := Lit(0, len).U
+      cnt_next := Lit(0, len).U
+      state_next := s_compute
+    } 
+    else if (when(state === s_compute)) {
+      val sub = Lit(len).U - cnt
+      val shift = (inputs.io_in1 << sub)(2 * len - 1, 0)
+      val subtractor = R - shift
+      val less = subtractor(2 * len - 1)
 
-        val (aSign, aVal) = abs(a, io_sign)
-        val (bSign, bVal) = abs(b, io_sign)
+      R_next := Mux(less, R, subtractor)
+      Q_next := Mux(less, Q << Lit(1).U, (Q << Lit(1).U) + Lit(1).U)
+      cnt_next := cnt + Lit(1).U
 
-        if (when(newReq)) {
-          aSignReg_next = aSign
-        } // val aSignReg = RegEnable(aSign, newReq)
-        if (when(newReq)) {
-          qSignReg_next = (aSign ^ bSign) && !divBy0
-        } // val qSignReg = RegEnable((aSign ^ bSign) && !divBy0, newReq)
-        if (when(newReq)) {
-          bReg_next = bVal
-        } // val aSignReg = RegEnable(aSign, newReq)
-        if (when(newReq)) {
-          aValx2Reg_next = Cat(aVal, Lit(0).U)
-        } // val aValx2Reg = RegEnable(Cat(aVal, "b0".U), newReq)
-
-        if (when(newReq)) {
-          state_next = s_log2
-        } else if (when(state === s_log2)) {
-          val canSkipShift = (Lit(len).U + Log2(bReg)) - Log2(aValx2Reg)
-          cnt_next = Mux(
-            divBy0,
-            Lit(0).U,
-            Mux(
-              canSkipShift >= Lit(len - 1).U,
-              Lit(len - 1).U,
-              canSkipShift
-            )
-          )
-          state_next = s_shift
-
-        } else if (when(state === s_shift)) {
-          shiftReg_next = aValx2Reg << cnt
-          state_next = s_compute
-        } else if (when(state === s_compute)) {
-          val enough = hi >= bReg
-          shiftReg_next = Cat(
-            Mux(enough, hi - bReg, hi)(len - 1, 0),
-            Cat(lo, enough)
-          )
-          cnt_next = cnt + Lit(1).U
-          if (when(cnt === Lit(len - 1).U)) { state_next = s_finish }
-        } else if (when(state === s_finish)) {
-          if (when(io_out_ready)) {
-            state_next = s_idle
-          }
-        }
-
-        val r    = hi(len, 1)
-        val resQ = Mux(qSignReg, -lo, lo)
-        val resR = Mux(aSignReg, -r, r)
-        io_out_bits = Cat(resR, resQ)
-
-        io_out_valid = (state === s_finish)
-        io_in_ready = (state === s_idle)
-
-        (
-          DividerOutputs(io_out_bits, io_out_valid, io_in_ready),
-          DividerRegs(state_next, 
-                      shiftReg_next, 
-                      aSignReg_next, 
-                      qSignReg_next, 
-                      bReg_next, 
-                      aValx2Reg_next, 
-                      cnt_next)
-        )
+      if (when(cnt_next === Lit(len - 1).U)) { state_next := s_finish }
+    } 
+    else if (when(state === s_finish)) {
+        state_next := s_init
     }
 
-  } ensuring { case (outputs, regNexts) =>
+    io_outQ := Q_next
+    io_outR := R_next
+
+    assert(io_outQ.width == len)
+    assert(io_outR.width == len)
+
+    assert(state_next.width == 2)
+    assert(R_next.width == 2 * len)
+    assert(Q_next.width == len)
+    assert(cnt_next.width == len)
+
+    (
+      Outputs(io_outQ, io_outR),
+      Regs(state_next, R_next, Q_next, cnt_next)
+    )
+    // }
+
+  } ensuring { case (outputs, regNexts) => 
     outputsRequire(outputs) && regsRequire(regNexts)
   }
 
-  def Run(timeout: Int, inputs: DividerInputs, regInit: DividerRegs): (DividerOutputs, DividerRegs) = {
+  def Run(timeout: BigInt, inputs: Inputs, regInit: Regs): (Outputs, Regs) = {
     require(timeout >= 1 && inputsRequire(inputs) && regsRequire(regInit))
 
     val (newOutputs, newRegs) = trans(inputs, regInit)
     if (timeout > 1) {
-      dividerRun(timeout - 1, inputs, newRegs)
+      Run(timeout - 1, inputs, newRegs)
     } else {
       (newOutputs, newRegs)
     }

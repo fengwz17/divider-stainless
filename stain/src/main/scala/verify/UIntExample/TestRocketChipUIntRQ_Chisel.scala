@@ -26,23 +26,16 @@ class TestRocketChipUIntRQ(len: Int = 64) extends Module {
   }.elsewhen(state === s_compute) {
     val sub = len.U - cnt
     val shift = (io.in2 << (len.U - cnt))(2 * len - 1, 0)
-    val subtractor = R - shift
-
-    printf(p"R_len: ${R.getWidth}, io.in2: ${io.in2.getWidth}, len_len: ${len.U.getWidth}, sub_len: ${sub.getWidth}, shift_len: ${shift.getWidth}, subtractor: ${subtractor.getWidth}\n")
-    printf("R: %b, io.in2: %b, len: %b, cnt: %b, sub: %b, shift: %b, subtractor: %b\n", R, io.in2, len.U, cnt, sub, shift, subtractor)
-    
+    val subtractor = R - shift  
     val less = subtractor(2 * len - 1)
     R := Mux(less, R, subtractor)
     Q := Mux(less, Q << 1.U, (Q << 1.U) + 1.U)
     cnt := cnt + 1.U
+    when(cnt === len.U) { state := s_finish }
+  }.elsewhen(state === s_finish) {
+    state := s_finish
   }
-  //   when(cnt === (len - 1).U) { state := s_finish }
-  // }.elsewhen(state === s_finish) {
-  //   state := s_init
-  // }
   
-  printf("cnt: %d\n", cnt)
-  printf("state: %d\n", state)
   io.outR := R
   io.outQ := Q
 }
