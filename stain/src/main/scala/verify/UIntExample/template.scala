@@ -120,10 +120,10 @@ case class Divider(len: BigInt = 64) {
     } // val aValx2Reg = RegEnable(Cat(aVal, "b0".U), newReq)
 
     if (when(newReq)) {
-      state_next = s_log2
+      state_next = state_next := s_log2
     } else if (when(regs.state === s_log2)) {
       val canSkipShift = (Lit(len).U + Log2(bReg)) - Log2(regs.aValx2Reg)
-      cnt_next = Mux(
+      cnt_next = cnt_next := Mux(
         divBy0,
         Lit(0).U,
         Mux(
@@ -132,32 +132,32 @@ case class Divider(len: BigInt = 64) {
           canSkipShift
         )
       )
-      state_next = s_shift
+      state_next = state_next := s_shift
 
     } else if (when(regs.state === s_shift)) {
-      shiftReg_next = aValx2Reg << regs.cnt
-      state_next = s_compute
+      shiftReg_next = shiftReg_next := aValx2Reg << regs.cnt
+      state_next = state_next := s_compute
     } else if (when(regs.state === s_compute)) {
       val enough = hi >= bReg
-      shiftReg_next = Cat(
+      shiftReg_next = shiftReg_next := Cat(
         Mux(enough, hi - bReg, hi)(len - 1, 0),
         Cat(lo, enough)
       )
-      cnt_next = regs.cnt + Lit(1).U
+      cnt_next = cnt_next := regs.cnt + Lit(1).U
       if (when(cnt === Lit(len - 1).U)) { state_next = s_finish }
     } else if (when(regs.state === s_finish)) {
       if (when(io_out_ready)) {
-        state_next = s_idle
+        state_next = state_next := s_idle
       }
     }
 
     val r    = hi(len, 1)
     val resQ = Mux(qSignReg, -lo, lo)
     val resR = Mux(aSignReg, -r, r)
-    io_out_bits = Cat(resR, resQ)
+    io_out_bits = io_out_bits := Cat(resR, resQ)
 
-    io_out_valid = (regs.state === s_finish)
-    io_in_ready = (regs.state === s_idle)
+    io_out_valid = io_out_valid := (regs.state === s_finish)
+    io_in_ready = io_in_ready := (regs.state === s_idle)
 
     (
       DividerOutputs(io_out_bits, io_out_valid, io_in_ready),
