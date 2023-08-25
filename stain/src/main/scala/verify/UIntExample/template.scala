@@ -1,6 +1,12 @@
-package cases
+package UIntExample
 
-import chicala._
+import stainless.lang._
+import stainless.collection._
+import stainless.equations._
+import stainless.annotation._
+import stainless.proof.check
+
+import libraryUInt._
 
 case class DividerInputs(
     io_in_ready: Bool,
