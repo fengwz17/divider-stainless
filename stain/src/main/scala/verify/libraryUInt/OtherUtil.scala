@@ -34,3 +34,15 @@ object max {
     f(ns.head, ns.tail)
   }
 }
+
+@opaque @library
+object until {
+  def apply(l: BigInt, r: BigInt): List[BigInt] = {
+    require(l <= r)
+    def f(res: List[BigInt], i: BigInt): List[BigInt] = {
+      if (l <= i) f(i :: res, i - 1)
+      else res
+    }
+    f(Nil[BigInt](), r - 1)
+  }
+}

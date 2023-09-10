@@ -34,7 +34,7 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   }
   def :=(that: UInt): UInt = {
     UInt(that.value % Pow2(this.width), this.width)
-  }
+  } ensuring(res => res.value == that.value % Pow2(this.width) && res.width == this.width)
 
   // Unary
 
@@ -86,7 +86,7 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
       if (carryed >= limt) carryed - limt else carryed,
       newWidth
     )
-  }
+  } ensuring(res => res.value == (this.value + that.value) % Pow2(res.width))
   def -(that: UInt): UInt = {
     val carryed  = this.value - that.value
     val newWidth = if (this.width > that.width) this.width else that.width
@@ -130,7 +130,7 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   // Binary compire
   def ===(that: UInt): Bool = {
     Bool(this.value == that.value)
-  }
+  } ensuring(res => res.value == (this.value == that.value))
   def >=(that: UInt): Bool = {
     Bool(this.value >= that.value)
   }
@@ -164,6 +164,10 @@ case class Bool(val value: Boolean) extends Bits {
     } else {
       BigInt(0)
     }
+  } ensuring(res => res == this.asUInt.value)
+
+  def :=(that: Bool): Bool = {
+    Bool(that.value)
   }
 
   def unary_! : Bool = {
@@ -212,5 +216,5 @@ object Lit {
       Pow2.Pow2BitLength(value)
       Lit(value, bitLength(value))
     }
-  }
+  } ensuring(res => res.value == value && res.width == bitLength(value))
 }

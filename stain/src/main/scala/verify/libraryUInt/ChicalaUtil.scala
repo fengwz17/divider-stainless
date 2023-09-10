@@ -36,15 +36,15 @@ object Mux {
 
 @opaque @library
 object Cat {
-  def apply(left: Bits, right: Bits): UInt = {
-    val l = left.asUInt
-    val r = right.asUInt
+  def apply(left: UInt, right: UInt): UInt = {
+    val l = left
+    val r = right
     UInt(
       (l.value * Pow2(r.width)) + r.value,
       l.width + r.width
     )
-  } ensuring(res => res.value == left.asUInt.value * Pow2(right.asUInt.width) + right.asUInt.value 
-    && res.width == left.asUInt.width + right.asUInt.width)
+  } ensuring(res => res.value == left.value * Pow2(right.width) + right.value 
+    && res.width == left.width + right.width)
   // `[T <: Bits]` then `List[T]` is not supported
   // `List[T]` in stainless lib is not covariant
   def apply(ls: List[UInt]): UInt = {
@@ -229,17 +229,17 @@ object Pow2 {
 
 }
 
-// @dropVCs
-// object Log2 {
-//   def apply(x: UInt): UInt = {
-//     val log2 = bitLength(x.value) - 1
-//     UInt(log2, bitLength(log2))
-//   }
-// }
+@library
+object Log2 {
+  def apply(x: UInt): UInt = {
+    val log2 = bitLength(x.value) - 1
+    UInt(log2, bitLength(log2))
+  }
+}
 
 @library
 object when {
   def apply(x: Bool): Boolean = {
     x.value
-  }
+  } ensuring(res => res == x.value)
 }
