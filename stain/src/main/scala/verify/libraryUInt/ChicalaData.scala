@@ -20,6 +20,10 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
     require(0 <= idx && idx < width)
     Bool((value / Pow2(idx)) % 2 == 1)
   }
+  // def apply(idx: BigInt): UInt = {
+  //   require(0 <= idx && idx < width)
+  //   UInt((value / Pow2(idx)) % 2, 1)
+  // }
   def apply(left: BigInt, right: BigInt): UInt = {
       require(right >= 0)
       require(left >= right)
@@ -44,29 +48,29 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
       width
     )
   }
-  // def unary_~ : UInt = {
-  //   def reverseUInt(u: UInt): UInt = {
-  //     def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
-  //       if (width > 0) {
-  //         f(result * 2 + bits % 2, width - 1, bits / 2)
-  //       } else {
-  //         result
-  //       }
-  //     }
-  //     UInt(f(0, u.value, u.width), u.width)
-  //   }
-  //   def reverseFlipUInt(u: UInt): UInt = {
-  //     def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
-  //       if (width > 0) {
-  //         f(result * 2 + (bits + 1) % 2, width - 1, bits / 2)
-  //       } else {
-  //         result
-  //       }
-  //     }
-  //     UInt(f(0, u.value, u.width), u.width)
-  //   }
-  //   reverseUInt(reverseFlipUInt(this))
-  // }
+  def unary_~ : UInt = {
+    def reverseUInt(u: UInt): UInt = {
+      def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
+        if (width > 0) {
+          f(result * 2 + bits % 2, width - 1, bits / 2)
+        } else {
+          result
+        }
+      }
+      UInt(f(0, u.value, u.width), u.width)
+    }
+    def reverseFlipUInt(u: UInt): UInt = {
+      def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
+        if (width > 0) {
+          f(result * 2 + (bits + 1) % 2, width - 1, bits / 2)
+        } else {
+          result
+        }
+      }
+      UInt(f(0, u.value, u.width), u.width)
+    }
+    reverseUInt(reverseFlipUInt(this))
+  }
 
   // Binary
 
@@ -131,6 +135,10 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   def ===(that: UInt): Bool = {
     Bool(this.value == that.value)
   } ensuring(res => res.value == (this.value == that.value))
+  def ===(that: Bool): Bool = {
+    require(this.width == BigInt(1))
+    Bool(this.value == that.asUInt.value)
+  }
   def >=(that: UInt): Bool = {
     Bool(this.value >= that.value)
   }
@@ -203,6 +211,7 @@ case class Lit(value: BigInt, width: BigInt) {
   require(0 <= value && value < Pow2(width))
   require(0 < width)
   def U: UInt = UInt(value, width)
+  def B: Bool = Bool(value != 0)
 }
 
 // set the width of 0.U to 1, not bitLength(0)     
@@ -217,4 +226,8 @@ object Lit {
       Lit(value, bitLength(value))
     }
   } ensuring(res => res.value == value && res.width == bitLength(value))
+
+  def apply(value: Boolean): Lit = {
+    Lit(if (value) 1 else 0, 1)
+  } // ensuring(res => res.value == (if (value) 1 else 0) && res.width == 1)
 }
