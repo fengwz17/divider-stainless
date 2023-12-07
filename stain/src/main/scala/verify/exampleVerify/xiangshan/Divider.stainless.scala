@@ -22,7 +22,8 @@ case class DividerInputs(
 case class DividerOutputs(
     io_in_ready: Bool,
     io_out_valid: Bool,
-    io_out_bits: UInt
+    io_out_bits: UInt,
+    io_out_bits_nexts_value: BigInt
 )
 
 @library
@@ -49,7 +50,7 @@ case class Divider(len: BigInt = 64) {
       io_in_bits_1.width == len
   }
   def outputsRequire(outputs: DividerOutputs): Boolean = outputs match {
-    case DividerOutputs(io_in_ready, io_out_valid, io_out_bits) =>
+    case DividerOutputs(io_in_ready, io_out_valid, io_out_bits, io_out_bits_next) =>
       io_out_bits.width == (len * 2)
   }
   def regsRequire(regs: DividerRegs): Boolean = regs match {
@@ -98,16 +99,12 @@ case class Divider(len: BigInt = 64) {
     in1 == in2 * regs.ghost_q * Pow2(len - regs.cnt.value) + regs.ghost_r &&
     regs.ghost_r == regs.shiftReg.value / Pow2(regs.cnt.value + 1) &&
     regs.shiftReg.value == regs.ghost_q + regs.ghost_r * Pow2(regs.cnt.value + 1) &&
-    // hold iff cnt == len, need proof
-    outputs.io_out_bits(2 * len - 1, len).value == regs.ghost_r &&
-    outputs.io_out_bits(len - 1, 0).value == regs.ghost_q
+    outputs.io_out_bits_nexts_value == regs.shiftReg.value / Pow2(len + 1) * Pow2(len) + regs.shiftReg.value % Pow2(len) 
+    // outputs.io_out_bits_nexts_value / Pow2(len) == regs.shiftReg.value / Pow2(len + 1) &&
+    // outputs.io_out_bits_nexts_value % Pow2(len) == regs.shiftReg.value % Pow2(len)
   }
 
   // lemma
-  @opaque @library
-  def lemma_var_value_width(value: BigInt, width: BigInt): Unit = {
-  }.ensuring(_ => 0 <= value && value < Pow2(width) && 0 < width)
-
   @opaque @library
   def lemma_r_q_invariant(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs, e: BigInt): Unit = {
     // val in1 = a.value
@@ -275,19 +272,6 @@ case class Divider(len: BigInt = 64) {
     }.qed
   }.ensuring(_ => regNexts.shiftReg.value == regNexts.ghost_r * Pow2(regNexts.cnt.value + 1) + regNexts.ghost_q)
 
-  // check again
-  @opaque @library
-  def lemma_out_bits_r(outputs: DividerOutputs, regs: DividerRegs): Unit = {
-    require(regs.shiftReg.value / Pow2(len + 1) == regs.ghost_r)
-    require(regs.shiftReg((len * 2), len + 1).value == outputs.io_out_bits((len * 2 - 1), len).value)
-    {
-      outputs.io_out_bits(2 * len - 1, len).value     ==:| trivial |:
-      regs.shiftReg((len * 2), len + 1).value ==:| trivial |:
-      regs.shiftReg.value / Pow2(len + 1)     ==:| trivial |:
-      regs.ghost_r                  
-    }.qed
-  }.ensuring(_ => outputs.io_out_bits(2 * len - 1, len).value == regs.ghost_r)
-
   // inner function
   @library
   def abs(a: UInt, sign: Bool): (Bool, UInt) = {
@@ -304,6 +288,7 @@ case class Divider(len: BigInt = 64) {
     var io_in_ready = Bool.empty()
     var io_out_valid = Bool.empty()
     var io_out_bits = UInt.empty((len * 2))
+    var io_out_bits_nexts_value = BigInt(0)
     // reg next
     var state_next = regs.state
     var shiftReg_next = regs.shiftReg
@@ -334,6 +319,7 @@ case class Divider(len: BigInt = 64) {
     // if b.length >= a.length, canSkipShift >= len - 1
     val canSkipShift = ((Lit(len).U + Log2(regs.bReg)) - Log2(regs.aValx2Reg))
     val enough = (hi.asUInt >= regs.bReg.asUInt)
+    assert(enough.value == (hi.value >= regs.bReg.value))
     val r = hi(len, 1)
     val resQ = Mux(regs.qSignReg, -lo, lo)
     val resR = Mux(regs.aSignReg, -r, r)
@@ -371,6 +357,8 @@ case class Divider(len: BigInt = 64) {
       // assist check
       assert(shiftReg_next.width == (len * 2 + 1))
       assert(shiftReg_next.value == Cat(Mux(enough, (hi - regs.bReg), hi)((len - 1), 0), Cat(lo, enough.asUInt)).value % Pow2(2 * len + 1))
+      // assert(io_out_bits.value == regs.shiftReg.value / Pow2(len + 1) * Pow2(len) + regs.shiftReg.value % Pow2(len))
+      io_out_bits_nexts_value = shiftReg_next.value / Pow2(len + 1) * Pow2(len) + shiftReg_next.value % Pow2(len) 
 
       // ghost vars update
       ghost_r_next = regs.ghost_r - regs.bReg.value * Pow2(len - regs.cnt.value - 1) * enough.asBigInt
@@ -388,7 +376,8 @@ case class Divider(len: BigInt = 64) {
     val outputs = DividerOutputs(
         io_in_ready,
         io_out_valid,
-        io_out_bits
+        io_out_bits,
+        io_out_bits_nexts_value
       )
     val regNexts = DividerRegs(
         state_next,
@@ -413,6 +402,7 @@ case class Divider(len: BigInt = 64) {
         inputs.io_in_bits_1.value * regNexts.ghost_q * Pow2(len - regNexts.cnt.value) + regNexts.ghost_r
       }.qed
 
+      assert(regNexts.shiftReg.value == Cat(Mux(enough, (hi - regs.bReg), hi)((len - 1), 0), Cat(lo, enough.asUInt)).value % Pow2(2 * len + 1))
       // prove shiftReg_next == 2 * shiftReg - in2 * e * Pow2(len + 1) + e
       {
         regNexts.shiftReg.value ==:| lemma_shiftReg_update(inputs, regs, regNexts, enough) |:
@@ -446,7 +436,7 @@ case class Divider(len: BigInt = 64) {
     in1 == in2 * outputs.io_out_bits(len - 1, 0).value + outputs.io_out_bits(2 * len - 1, len).value
   }
   
-  @ignore
+  @library
   def dividerRun(inputs: DividerInputs, regInit: DividerRegs): (DividerOutputs, DividerRegs) = {
     require(inputsRequire(inputs) && regsRequire(regInit))
     require(preCond(inputs, regInit))

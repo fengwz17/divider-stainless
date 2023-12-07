@@ -22,10 +22,10 @@ object bitLength {
 
 /*
  * @example {{{
- * log2Up(1)  // returns 0
- * log2Up(2)  // returns 1
- * log2Up(3)  // returns 2
- * log2Up(4)  // returns 2
+ * log2Ceil(1)  // returns 0
+ * log2Ceil(2)  // returns 1
+ * log2Ceil(3)  // returns 2
+ * log2Ceil(4)  // returns 2
  * }}}
  */
 @library
@@ -63,8 +63,12 @@ object log2Up {
   * log2Floor(4)  // returns 2
   * }}}
   */
+@library
 object log2Floor {
-  def apply(in: BigInt): BigInt = log2Ceil(in) - (if (isPow2(in)) 0 else 1)
+  def apply(in: BigInt): BigInt = {
+    require(in > 0)
+    log2Ceil(in) - (if (isPow2(in)) 0 else 1)
+  }
 }
 
 /** Returns whether a Scala integer is a power of two.
@@ -76,8 +80,14 @@ object log2Floor {
   * isPow2(4)  // returns true
   * }}}
   */
+@library
 object isPow2 {
-  def apply(in: BigInt): Boolean = in > 0 && ((in & (in - 1)) == 0)
+  def apply(in: BigInt): Boolean = {
+    require(in > 0)
+    // stainless does not support bitwise '&' in BigInt
+    // in > 0 && ((in & (in - BigInt(1))) == 0)
+    Pow2(bitLength(in - 1)) == in
+  }
 }
 
 @library
@@ -136,7 +146,7 @@ object MuxLookup {
 object Pow2 {
   def apply(p: Int): BigInt = {
     // Only literal arguments are allowed for BigInt.
-    // can't cast Int to BigInt
+    // can't cast Int to BigInt in stainless
     def f(base: BigInt, p: Int): BigInt = {
       if (p > 0) {
         2 * f(base, p - 1)
@@ -366,6 +376,10 @@ object Log2 {
   def apply(x: UInt): UInt = {
     val log2 = bitLength(x.value) - 1
     UInt(log2, bitLength(log2))
+  }
+  def apply(x: UInt, w: BigInt): UInt = {
+    val log2 = bitLength(x.value) - 1
+    UInt(log2, w)
   }
 }
 

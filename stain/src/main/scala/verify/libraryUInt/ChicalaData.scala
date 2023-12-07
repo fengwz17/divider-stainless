@@ -14,7 +14,7 @@ sealed abstract class Bits {
 @library
 case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   require(0 < width)
-  require(0 <= value && value < Pow2(width))
+  // require(0 <= value && value < Pow2(width))
 
   def apply(idx: BigInt): Bool = {
     require(0 <= idx && idx < width)
@@ -49,27 +49,28 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
     )
   }
   def unary_~ : UInt = {
-    def reverseUInt(u: UInt): UInt = {
-      def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
-        if (width > 0) {
-          f(result * 2 + bits % 2, width - 1, bits / 2)
-        } else {
-          result
-        }
-      }
-      UInt(f(0, u.value, u.width), u.width)
-    }
-    def reverseFlipUInt(u: UInt): UInt = {
-      def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
-        if (width > 0) {
-          f(result * 2 + (bits + 1) % 2, width - 1, bits / 2)
-        } else {
-          result
-        }
-      }
-      UInt(f(0, u.value, u.width), u.width)
-    }
-    reverseUInt(reverseFlipUInt(this))
+    // def reverseUInt(u: UInt): UInt = {
+    //   def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
+    //     if (width > 0) {
+    //       f(result * 2 + bits % 2, width - 1, bits / 2)
+    //     } else {
+    //       result
+    //     }
+    //   }
+    //   UInt(f(0, u.value, u.width), u.width)
+    // }
+    // def reverseFlipUInt(u: UInt): UInt = {
+    //   def f(result: BigInt, width: BigInt, bits: BigInt): BigInt = {
+    //     if (width > 0) {
+    //       f(result * 2 + (bits + 1) % 2, width - 1, bits / 2)
+    //     } else {
+    //       result
+    //     }
+    //   }
+    //   UInt(f(0, u.value, u.width), u.width)
+    // }
+    // reverseUInt(reverseFlipUInt(this))
+    UInt(Pow2(width) - 1 - value, width)
   }
 
   // Binary
@@ -127,10 +128,59 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
     UInt(this.value * Pow2(that.value), this.width + Pow2(that.width) - 1)
   } ensuring(res => res.value < Pow2(this.width + that.value))
 
+  @library
+  def >>(that: BigInt): UInt = {
+    val newValue = this.value / Pow2(that)
+    val newWidth = this.width // w(x) - minVal(y) or w(x) - n
+    UInt(newValue, newWidth)
+  }
+
   // def <<(that: BigInt): UInt = {
   //   UInt(this.value * Pow2(that), this.width + that)
   // }
 
+  // bitwise operations
+  @library
+  def &(that: UInt): UInt = {
+    require(this.width >= 1)
+    require(that.width >= 1)
+    val newWidth = if (this.width <= that.width) this.width else that.width
+    val msb = this(newWidth - 1) & that(newWidth - 1)
+    val newValue = newWidth match {
+      case 1 => msb.asBigInt
+      case _ => msb.asBigInt * Pow2(newWidth - 1) 
+                    + (this(newWidth - 2, 0) & that(newWidth - 2, 0)).value
+    }
+    UInt(newValue, newWidth)
+  }
+
+  @library
+  def |(that: UInt): UInt = {
+    require(this.width >= 1)
+    require(that.width >= 1)
+    val newWidth = if (this.width <= that.width) this.width else that.width
+    val msb = this(newWidth - 1) | that(newWidth - 1)
+    val newValue = newWidth match {
+      case 1 => msb.asBigInt
+      case _ => msb.asBigInt * Pow2(newWidth - 1) 
+                    + (this(newWidth - 2, 0) | that(newWidth - 2, 0)).value
+    }
+    UInt(newValue, newWidth)
+  }
+  
+  @library
+  def ^(that: UInt): UInt = {
+    require(this.width >= 1)
+    require(that.width >= 1)
+    val newWidth = if (this.width <= that.width) this.width else that.width
+    val msb = this(newWidth - 1) ^ that(newWidth - 1)
+    val newValue = newWidth match {
+      case 1 => msb.asBigInt
+      case _ => msb.asBigInt * Pow2(newWidth - 1) 
+                    + (this(newWidth - 2, 0) ^ that(newWidth - 2, 0)).value
+    }
+    UInt(newValue, newWidth)
+  }
   // Binary compire
   def ===(that: UInt): Bool = {
     Bool(this.value == that.value)
@@ -196,6 +246,16 @@ case class Bool(val value: Boolean) extends Bits {
   }
   def &&(that: Bool): Bool = {
     Bool(this.value && that.value)
+  }
+  def ||(that: Bool): Bool = {
+    Bool(this.value || that.value)
+  }
+
+  def ===(that: Bool): Bool = {
+    Bool(this.value == that.value)
+  }
+  def =/=(that: Bool): Bool = {
+    Bool(this.value != that.value)
   }
 }
 
