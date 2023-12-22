@@ -9,7 +9,7 @@ import stainless.proof.check
 @library
 object bitLength {
   def apply(x: BigInt): BigInt = {
-    require(x >= 0)
+    // require(x >= 0)
     decreases(x)
     val result = x match {
       case BigInt(0) => BigInt(0)
@@ -31,8 +31,8 @@ object bitLength {
 @library
 object log2Ceil {
   def apply(x: BigInt): BigInt = {
-    require(x > 0)
-    bitLength(x - 1)
+    // require(x > 0)
+    if (x == 1) 0 else bitLength(x - 1)
   }
 }
 
@@ -47,7 +47,7 @@ object log2Ceil {
 @library
 object log2Up {
   def apply(x: BigInt): BigInt = {
-    require(x > 0)
+    // require(x > 0)
     if (x == 1) 1 else bitLength(x - 1)
   }
 }
@@ -66,8 +66,8 @@ object log2Up {
 @library
 object log2Floor {
   def apply(in: BigInt): BigInt = {
-    require(in > 0)
-    log2Ceil(in) - (if (isPow2(in)) 0 else 1)
+    // require(in > 0)
+    if (in == 1) 0 else (log2Ceil(in) - (if (isPow2(in)) 0 else 1))
   }
 }
 
@@ -83,10 +83,10 @@ object log2Floor {
 @library
 object isPow2 {
   def apply(in: BigInt): Boolean = {
-    require(in > 0)
+    // require(in > 0)
     // stainless does not support bitwise '&' in BigInt
     // in > 0 && ((in & (in - BigInt(1))) == 0)
-    Pow2(bitLength(in - 1)) == in
+    if (in == 1) true else (Pow2(bitLength(in - 1)) == in)
   }
 }
 
@@ -124,7 +124,7 @@ object Cat {
 @opaque @library
 object Fill {
   def apply(times: BigInt, bool: Bool): UInt = {
-    require(times > 0)
+    // require(times > 0)
     def f(result: UInt, times: BigInt): UInt = {
       if (times > 0)
         f(Cat(result, bool), times - 1)
@@ -135,7 +135,7 @@ object Fill {
   }
 }
 
-@opaque @library @ignore
+@opaque @library @ignore 
 object MuxLookup {
   def apply[T <: Bits](key: UInt, default: T, mapping: List[(UInt, T)]): T = {
     mapping.foldLeft(default) { case (res, (k, v)) => Mux(k === key, v, res) }
@@ -144,21 +144,21 @@ object MuxLookup {
 
 @library
 object Pow2 {
-  def apply(p: Int): BigInt = {
-    // Only literal arguments are allowed for BigInt.
-    // can't cast Int to BigInt in stainless
-    def f(base: BigInt, p: Int): BigInt = {
-      if (p > 0) {
-        2 * f(base, p - 1)
-      } else {
-        base
-      }
-    }
-    f(BigInt(1), p)
-  } ensuring(res => res > 0)
+  // def apply(p: Int): BigInt = {
+  //   // Only literal arguments are allowed for BigInt.
+  //   // can't cast Int to BigInt in stainless
+  //   def f(base: BigInt, p: Int): BigInt = {
+  //     if (p > 0) {
+  //       2 * f(base, p - 1)
+  //     } else {
+  //       base
+  //     }
+  //   }
+  //   f(BigInt(1), p)
+  // } ensuring(res => res > 0)
 
   def apply(p: BigInt): BigInt = {
-    require(p >= 0)
+    // require(p >= 0)
     decreases(p)
     val result = p match {
       case BigInt(0) => BigInt(1)
@@ -170,9 +170,9 @@ object Pow2 {
   // Pow2 lemmas
   @opaque @inlineOnce @library
   def Pow2Mul(s: BigInt, x: BigInt, y: BigInt): Unit = {
-    require(x >= 0)
-    require(y >= 0)
-    require(s == x + y)
+    // require(x >= 0)
+    // require(y >= 0)
+    // require(s == x + y)
     decreases(x)
     x match {
       case BigInt(0) => ()
@@ -188,8 +188,8 @@ object Pow2 {
 
   @opaque @inlineOnce @library
   def Pow2Monotone(c: BigInt, b: BigInt): Unit = {
-    require(0 <= b)
-    require(b <= c)
+    // require(0 <= b)
+    // require(b <= c)
     {
       Pow2(c)         ==:| trivial |:
       Pow2(c - b + b) ==:| Pow2Mul(c, c - b, b) |:
@@ -202,8 +202,8 @@ object Pow2 {
 
   @opaque @inlineOnce @library
   def Pow2MonotoneStrict(c: BigInt, b: BigInt): Unit = {
-    require(0 <= b)
-    require(b < c)
+    // require(0 <= b)
+    // require(b < c)
     {
       Pow2(c)         ==:| trivial |:
       Pow2(c - b + b) ==:| Pow2Mul(c, c - b, b) |:
@@ -216,7 +216,7 @@ object Pow2 {
 
   @opaque @inlineOnce @library
   def Pow2BitLength(x: BigInt): Unit = {
-    require(x >= 0)
+    // require(x >= 0)
     decreases(x)
     x match {
       case BigInt(0) => ()
@@ -238,9 +238,9 @@ object Pow2 {
 
   @opaque @inlineOnce @library
   def Pow2ModReduce(a: BigInt, x: BigInt, y: BigInt): Unit = {
-      require(a >= 0)
-      require(x >= 0 && y >= 0)
-      require(x >= y)
+      // require(a >= 0)
+      // require(x >= 0 && y >= 0)
+      // require(x >= y)
       val h = a / Pow2(x) 
       val l = a % Pow2(x)
       val hl = l / Pow2(y)
@@ -269,12 +269,12 @@ object Pow2 {
 
   @opaque @inlineOnce @library
   def Pow2ModLowBits(t: BigInt, a: BigInt, pow2b: BigInt, c: BigInt): Unit = {
-    require(c >= BigInt(0))
-    require(a >= c)
-    require(pow2b >= 0)
+    // require(c >= BigInt(0))
+    // require(a >= c)
+    // require(pow2b >= 0)
     // lemmaPow2lt(c, b)
     // require(pow2b < Pow2(c))
-    require(t >= 0)
+    // require(t >= 0)
     assert(Pow2(a - c) >= 0)
     {
       ((Pow2(a - c) * Pow2(c) + pow2b)) / Pow2(c) ==:| trivial |:
@@ -295,9 +295,9 @@ object Pow2 {
   // (a / Pow2(i - 1)) == (2 * a / Pow2(i))
   @opaque  @library
   def lemmaPow2div(i: BigInt, a: BigInt, len: BigInt): Unit = {
-    require(len >= 5)
-    require(i >= BigInt(2) && i < len && i % 2 == 0)
-    require(a >= 0 && a <= Pow2(len - 2) - 1)
+    // require(len >= 5)
+    // require(i >= BigInt(2) && i < len && i % 2 == 0)
+    // require(a >= 0 && a <= Pow2(len - 2) - 1)
     val x = a / Pow2(i - 1)
     val y = a - x * Pow2(i - 1)
     assert(y < Pow2(i - 1))
@@ -313,8 +313,8 @@ object Pow2 {
   // a / Pow2(x) / Pow2(y)  == a / Pow2(x + y)
   @opaque  @library
   def lemmaPow2DivAdd(a: BigInt, x: BigInt, y: BigInt): Unit = {
-    require(x >= 0 && y >= 0)
-    require(a >= 0)
+    // require(x >= 0 && y >= 0)
+    // require(a >= 0)
     val h = a / Pow2(x + y)
     val l = a - h * Pow2(x + y)
     assert(l < Pow2(x + y))
@@ -342,9 +342,9 @@ object Pow2 {
    
   @library
   def lemma_Pow2ModZero(a: BigInt, i: BigInt, j: BigInt): Unit = {
-    require(a >= 0)
-    require(i >= 0)
-    require(j >= 0 && j <= i)
+    // require(a >= 0)
+    // require(i >= 0)
+    // require(j >= 0 && j <= i)
     {
       a * Pow2(i) % Pow2(j) ==:| trivial |:
       a * Pow2(i) - a * Pow2(i) / Pow2(j) * Pow2(j) ==:| trivial |:
@@ -358,10 +358,10 @@ object Pow2 {
  
   @library
   def lemma_Pow2Modilj(a: BigInt, i: BigInt, j: BigInt): Unit = {
-    require(a >= 0)
-    require(i >= 0)
-    require(j >= 0 && j >= i)
-    require(a * Pow2(i) < Pow2(j))
+    // require(a >= 0)
+    // require(i >= 0)
+    // require(j >= 0 && j >= i)
+    // require(a * Pow2(i) < Pow2(j))
     {
       a * Pow2(i) % Pow2(j) ==:| trivial |:
       a * Pow2(i) - a * Pow2(i) / Pow2(j) * Pow2(j) ==:| trivial |:

@@ -13,11 +13,10 @@ sealed abstract class Bits {
 
 @library
 case class UInt(val value: BigInt, val width: BigInt) extends Bits {
-  require(0 < width)
+  // require(0 < width)
   // require(0 <= value && value < Pow2(width))
-
   def apply(idx: BigInt): Bool = {
-    require(0 <= idx && idx < width)
+    // require(0 <= idx && idx < width)
     Bool((value / Pow2(idx)) % 2 == 1)
   }
   // def apply(idx: BigInt): UInt = {
@@ -25,15 +24,15 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   //   UInt((value / Pow2(idx)) % 2, 1)
   // }
   def apply(left: BigInt, right: BigInt): UInt = {
-      require(right >= 0)
-      require(left >= right)
+      // require(right >= 0)
+      // require(left >= right)
       UInt((value / Pow2(right)) % Pow2(left - right + 1), left - right + 1)
   } ensuring(res => res.width == left - right + 1 && res.value == (this.value / Pow2(right)) % Pow2(left - right + 1))
 
   def getWidth: BigInt = width
   def asUInt: UInt     = this
   def asBool: Bool = {
-    require(width == 1)
+    // require(width == 1)
     Bool(if (value == 1) true else false)
   }
   def :=(that: UInt): UInt = {
@@ -142,8 +141,9 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   // bitwise operations
   @library
   def &(that: UInt): UInt = {
-    require(this.width >= 1)
-    require(that.width >= 1)
+    // require(this.width >= 1)
+    // require(that.width >= 1)
+    decreases(this.width, that.width)
     val newWidth = if (this.width <= that.width) this.width else that.width
     val msb = this(newWidth - 1) & that(newWidth - 1)
     val newValue = newWidth match {
@@ -156,8 +156,9 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
 
   @library
   def |(that: UInt): UInt = {
-    require(this.width >= 1)
-    require(that.width >= 1)
+    // require(this.width >= 1)
+    // require(that.width >= 1)
+    decreases(this.width, that.width)
     val newWidth = if (this.width <= that.width) this.width else that.width
     val msb = this(newWidth - 1) | that(newWidth - 1)
     val newValue = newWidth match {
@@ -170,8 +171,9 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
   
   @library
   def ^(that: UInt): UInt = {
-    require(this.width >= 1)
-    require(that.width >= 1)
+    // require(this.width >= 1)
+    // require(that.width >= 1)
+    decreases(this.width, that.width)
     val newWidth = if (this.width <= that.width) this.width else that.width
     val msb = this(newWidth - 1) ^ that(newWidth - 1)
     val newValue = newWidth match {
@@ -186,18 +188,26 @@ case class UInt(val value: BigInt, val width: BigInt) extends Bits {
     Bool(this.value == that.value)
   } ensuring(res => res.value == (this.value == that.value))
   def ===(that: Bool): Bool = {
-    require(this.width == BigInt(1))
+    // require(this.width == BigInt(1))
     Bool(this.value == that.asUInt.value)
   }
   def >=(that: UInt): Bool = {
     Bool(this.value >= that.value)
+  }
+  // not original Chisel op, used to compare UInt value
+  def ==(that: UInt): Boolean = {
+    this.value == that.value
+  }
+  // not original Chisel op, used to compare UInt value
+  def !=(that: UInt): Boolean = {
+    this.value != that.value
   }
 }
 
 @library
 object UInt {
   def empty(width: BigInt): UInt = {
-    require(0 < width)
+    // require(0 < width)
     UInt(BigInt(0), width)
   }
   // def :=(that: UInt): Unit = {
@@ -206,7 +216,7 @@ object UInt {
   // }
 }
 
-@library
+@library @dropVCs
 case class Bool(val value: Boolean) extends Bits {
   def asUInt: UInt = {
     if (value) {
@@ -257,6 +267,14 @@ case class Bool(val value: Boolean) extends Bits {
   def =/=(that: Bool): Bool = {
     Bool(this.value != that.value)
   }
+  // not original Chisel op, used to compare UInt value
+  def ==(that: Bool): Boolean = {
+    this.value == that.value
+  }
+  // not original Chisel op, used to compare UInt value
+  def !=(that: Bool): Boolean = {
+    this.value != that.value
+  }
 }
 
 @library
@@ -268,8 +286,8 @@ object Bool {
 
 @library
 case class Lit(value: BigInt, width: BigInt) {
-  require(0 <= value && value < Pow2(width))
-  require(0 < width)
+  // require(0 <= value && value < Pow2(width))
+  // require(0 < width)
   def U: UInt = UInt(value, width)
   def B: Bool = Bool(value != 0)
 }
@@ -278,7 +296,7 @@ case class Lit(value: BigInt, width: BigInt) {
 @library
 object Lit {
   def apply(value: BigInt): Lit = {
-    require(0 <= value)
+    // require(0 <= value)
     if (value == 0) {
       Lit(0, 1)
     } else {

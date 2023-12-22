@@ -1,4 +1,4 @@
-package example.xiangshan
+package exampleVerify.xiangshan
 
 import stainless.lang._
 import stainless.collection._
@@ -36,13 +36,13 @@ case class C22() {
 
     // body
     var temp = List.fill(1)(UInt.empty(2))
-    (0 until temp.length).foreach((i: BigInt) => {
+    until(0, temp.length).foreach((i: BigInt) => {
       val (a, b) = (inputs.io_in(0)(i), inputs.io_in(1)(i))
       val sum = (a ^ b)
       val cout = (a & b)
       temp = temp.updated(i, Cat(cout, sum))
     })
-    (0 until io_out.length).foreach((i: BigInt) => io_out = io_out.updated(i, Cat(temp.reverse.map((x$2: UInt) => x$2(i)))))
+    until(0, io_out.length).foreach((i: BigInt) => io_out = io_out.updated(i, Cat(temp.reverse.map((x$2: UInt) => x$2(i)))))
 
     (
       C22Outputs(io_out),
