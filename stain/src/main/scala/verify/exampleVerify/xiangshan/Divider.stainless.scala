@@ -44,18 +44,21 @@ case class DividerRegs(
 
 case class Divider(len: BigInt = 64) {
   require(len >= 1)
+  @library
   def inputsRequire(inputs: DividerInputs): Boolean = inputs match {
     case DividerInputs(io_in_valid, io_in_bits_0, io_in_bits_1, io_sign, io_out_ready) =>
       // io_in_bits.length == 2 &&
       // io_in_bits.forall(_.width == len)
       io_in_bits_0.width == len && 0 <= io_in_bits_0.value && io_in_bits_0.value < Pow2(len) && 
-      io_in_bits_1.width == len && 0 <= io_in_bits_1.value && io_in_bits_1.value < Pow2(len)
-
+      io_in_bits_1.width == len && 0 <= io_in_bits_1.value && io_in_bits_1.value < Pow2(len) && 
+      io_in_valid.value == true
   }
+  @library
   def outputsRequire(outputs: DividerOutputs): Boolean = outputs match {
     case DividerOutputs(io_in_ready, io_out_valid, io_out_bits, io_out_bits_next) =>
       io_out_bits.width == (len * 2) && io_out_bits.value >= 0 && io_out_bits.value < Pow2(len * 2)
   }
+  @library
   def regsRequire(regs: DividerRegs): Boolean = regs match {
     case DividerRegs(state, shiftReg, aSignReg, qSignReg, bReg, aValx2Reg, cnt, ghost_r, ghost_q, cycle) =>
       state.width == 3 && state.value >= 0 && state.value < Pow2(3) &&
@@ -63,143 +66,142 @@ case class Divider(len: BigInt = 64) {
       // Unknown size bReg &&
       // Unknown size aValx2Reg &&
       cnt.width == bitLength(len) && cnt.value >= 0 && cnt.value <= len &&
-      cycle >= 0 && cycle < 2 * len 
+      cycle >= 0 && cycle < 2 * len  &&
+      0 <= regs.ghost_r && 0 <= regs.ghost_q
   }
 
+  // @inline
+  @library
   def preCond(inputs: DividerInputs, regs: DividerRegs): Boolean = {
-    preCond_idle(inputs, regs) || preCond_log2(inputs, regs) || preCond_shift(inputs, regs) // ||
-      // preCond_compt(inputs, regs)
+    preCond_idle(inputs, regs) || preCond_log2(inputs, regs) || preCond_shift(inputs, regs) || 
+      preCond_compt(inputs, regs) || preCond_finish(inputs, regs)
   }
+  // @inline
+  @library
   def postCond(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs, outputs: DividerOutputs): Boolean = {
-    postCond_idle(inputs, regs, regNexts) && postCond_log2(inputs, regs, regNexts) && postCond_shift(inputs, regs, regNexts) // &&
-      // postCond_compt(inputs, regs, regNexts, outputs)
+    ((regs.state.value < BigInt(4)) && (regs.cnt.value <= len - 1) && (postCond_idle(inputs, regs, regNexts) && postCond_log2(inputs, regs, regNexts) && postCond_shift(inputs, regs, regNexts) && 
+    postCond_compt(inputs, regs, regNexts, outputs))) ||
+      (regs.state.value == BigInt(4) && regs.cnt.value == len && postCond_finish(inputs, regs, regNexts, outputs))
   }
-
+  
+  // // @inline
+  // def preCond(inputs: DividerInputs, regs: DividerRegs): Boolean = {
+  //   preCond_idle(inputs, regs)
+  // }
+  // // @inline
+  // def postCond(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs, outputs: DividerOutputs): Boolean = {
+  //   (regs.state.value < BigInt(4)) && (regs.cnt.value <= len - 1) && postCond_idle(inputs, regs, regNexts)
+  // }
+  @library
+  def state_cond(regs: DividerRegs): Boolean = {
+    regs.state.value == BigInt(0) ||
+    regs.state.value == BigInt(1) ||
+    regs.state.value == BigInt(2) ||
+    regs.state.value == BigInt(3) ||
+    regs.state.value == BigInt(4)
+  }
+  @inline @library
   def preCond_idle(inputs: DividerInputs, regs: DividerRegs): Boolean = {
-    regs.state.value == BigInt(0)
+    regs.state.value == BigInt(0) && regs.cnt.value == BigInt(0)
   }
+  @inline @library
   def postCond_idle(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs): Boolean = {
-    // val (a, b) = (inputs.io_in_bits_0, inputs.io_in_bits_1)
-    // val (aSign, aVal) = abs(a, inputs.io_sign)
-    // val (bSign, bVal) = abs(b, inputs.io_sign)
-    // val divBy0 = (b === Lit(0, len).U)
-    // !(regs.state.value == BigInt(0)) || (
-    //   regNexts.state.value == BigInt(1) && 
-    //   // regNexts.aSignReg.value == aSign.value &&
-    //   // regNexts.qSignReg.value == ((aSign ^ bSign) && !divBy0).value &&
-    //   regNexts.aSignReg.value == false &&
-    //   regNexts.qSignReg.value == false &&
-    //   regNexts.bReg.value == bVal.value &&
-    //   regNexts.aValx2Reg.value == aVal.value * 2
-    // )
-
     // (io_in_valid == true) => (preCond_idle => preCond_log2) 
     // (io_in_valid == false) => preCond_idle
     regNexts.cycle == regs.cycle + 1 &&
-    (!(inputs.io_in_valid.value == true) || (!preCond_idle(inputs, regs) || preCond_log2(inputs, regNexts))) &&
-    (!(inputs.io_in_valid.value == false) || preCond_idle(inputs, regNexts))
+    !preCond_idle(inputs, regs) || preCond_log2(inputs, regNexts)
   }
-
+  @inline @library
   def preCond_log2(inputs: DividerInputs, regs: DividerRegs): Boolean = {
     val (a, b) = (inputs.io_in_bits_0, inputs.io_in_bits_1)
     val (aSign, aVal) = abs(a, inputs.io_sign)
     val (bSign, bVal) = abs(b, inputs.io_sign)
     val divBy0 = (b === Lit(0, len).U)
-    regs.state.value == BigInt(1) &&
+    regs.state.value == BigInt(1) && regs.cnt.value == BigInt(0) &&
     regs.aSignReg.value == aSign.value &&
     regs.qSignReg.value == ((aSign ^ bSign) && !divBy0).value &&
     regs.bReg.value == bVal.value &&
     regs.aValx2Reg.value == aVal.value * 2
   }
+  @inline @library
   def postCond_log2(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs): Boolean = {
-    // val (a, b) = (inputs.io_in_bits_0, inputs.io_in_bits_1)
-    // val divBy0 = (b === Lit(0, len).U)
-    // val canSkipShift = ((Lit(len).U + Log2(regs.bReg)) - Log2(regs.aValx2Reg))
-    // !(regs.state.value == BigInt(1)) || (
-    //   regNexts.state.value == BigInt(2) && 
-    //   regNexts.cnt.value == (Mux(divBy0, Lit(0).U, Mux((canSkipShift >= Lit((len - 1)).U), Lit((len - 1)).U, canSkipShift))).value &&
-    //   regNexts.aSignReg.value == false &&
-    //   regNexts.qSignReg.value == false &&
-    //   regNexts.bReg.value == regs.bReg.value &&
-    //   regNexts.aValx2Reg.value == regs.aValx2Reg.value
-    // )
     regNexts.cycle == regs.cycle + 1 &&
-    !preCond_log2(inputs, regs) || preCond_shift(inputs, regNexts)
-    
+    !preCond_log2(inputs, regs) || preCond_idle(inputs, regNexts)
   }
-
+  @inline @library
   def preCond_shift(inputs: DividerInputs, regs: DividerRegs): Boolean = {
     val (a, b) = (inputs.io_in_bits_0, inputs.io_in_bits_1)
+    val (aSign, aVal) = abs(a, inputs.io_sign)
+    val (bSign, bVal) = abs(b, inputs.io_sign)
     val divBy0 = (b === Lit(0, len).U)
     val canSkipShift = ((Lit(len).U + Log2(regs.bReg)) - Log2(regs.aValx2Reg))
+    aVal.value >= BigInt(0) && bVal.value >= BigInt(0) &&
+    regs.aSignReg.value == aSign.value &&
+    regs.qSignReg.value == ((aSign ^ bSign) && !divBy0).value &&
+    regs.bReg.value == bVal.value &&
+    regs.aValx2Reg.value == aVal.value * 2 &&
     regs.state.value == BigInt(2) && 
     regs.cnt.value == (Mux(divBy0, Lit(0).U, Mux((canSkipShift >= Lit((len - 1)).U), Lit((len - 1)).U, canSkipShift))).value
   }
+  @library
   def postCond_shift(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs): Boolean = {
-    // !(regs.state.value == BigInt(2)) || (
-    //   regNexts.state.value == BigInt(3) &&
-    //   regNexts.shiftReg.value == regs.aValx2Reg.value * Pow2(regs.cnt.value) &&
-    //   regNexts.aSignReg.value == false &&
-    //   regNexts.qSignReg.value == false &&
-    //   regNexts.bReg.value == inputs.io_in_bits_1.value &&
-    //   inputs.io_in_bits_0.value == inputs.io_in_bits_1.value * regNexts.ghost_q * Pow2(len - regNexts.cnt.value) + regNexts.ghost_r && 
-    //   regNexts.ghost_r == regNexts.shiftReg.value / Pow2(regNexts.cnt.value + 1) &&
-    //   regNexts.shiftReg.value == regNexts.ghost_q + regNexts.ghost_r * Pow2(regNexts.cnt.value + 1)    
-    // )
     regNexts.cycle == regs.cycle + 1 &&
     !preCond_shift(inputs, regs) || preCond_compt(inputs, regNexts)
   }
-
+  @library
   def preCond_compt(inputs: DividerInputs, regs: DividerRegs): Boolean = {
     // require(inputs.io_in_bits.length == 2 && inputs.io_in_bits.forall(_.width == len))
     // require(inputs.io_in_bits_0.width == len && inputs.io_in_bits_1.width == len)
-    val in1 = inputs.io_in_bits_0.value
-    val in2 = inputs.io_in_bits_1.value
-    len > 0 &&
-    0 <= in1 && in1 < Pow2(len) &&
-    0 <= in2 && in2 < Pow2(len) && 
-    regs.qSignReg.value == false &&
-    regs.aSignReg.value == false &&
+    val (a, b) = (inputs.io_in_bits_0, inputs.io_in_bits_1)
+    val (aSign, aVal) = abs(a, inputs.io_sign)
+    val (bSign, bVal) = abs(b, inputs.io_sign)
+    val divBy0 = (b === Lit(0, len).U)
+    0 <= a.value && a.value < Pow2(len) &&
+    0 <= b.value && b.value < Pow2(len) && 
+    // regs.qSignReg.value == false &&
+    // regs.aSignReg.value == false &&
+    regs.aSignReg.value == aSign.value &&
+    regs.qSignReg.value == ((aSign ^ bSign) && !divBy0).value &&
     regs.state.value == BigInt(3) &&
-    regs.bReg.value == in2 &&
+    // regs.bReg.value == in2 &&
+    regs.bReg.value == bVal.value &&
+    regs.aValx2Reg.value == aVal.value * 2 &&
+    // regs.shiftReg.value == (regs.aValx2Reg << regs.cnt).value
     regs.shiftReg.value >= BigInt(0) &&
     0 <= regs.cnt.value && regs.cnt.value < len && 
     0 <= regs.ghost_r && 0 <= regs.ghost_q &&
-    in1 == in2 * regs.ghost_q * Pow2(len - regs.cnt.value) + regs.ghost_r && 
+    aVal.value == regs.bReg.value * regs.ghost_q * Pow2(len - regs.cnt.value) + regs.ghost_r && 
     regs.ghost_r == regs.shiftReg.value / Pow2(regs.cnt.value + 1) &&
     regs.shiftReg.value == regs.ghost_q + regs.ghost_r * Pow2(regs.cnt.value + 1)    
   }
+  @library
   def postCond_compt(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs, outputs: DividerOutputs): Boolean = {
     // require(inputs.io_in_bits.length == 2 && inputs.io_in_bits.forall(_.width == len))
     // require(inputs.io_in_bits_0.width == len && inputs.io_in_bits_1.width == len)
     val in1 = inputs.io_in_bits_0.value
     val in2 = inputs.io_in_bits_1.value
-    !(regs.state.value == BigInt(3)) || (
-      len > 0 &&
-      0 <= in1 && in1 < Pow2(len) &&
-      0 <= in2 && in2 < Pow2(len) && 
-      regNexts.bReg.value == in2 &&
-      regNexts.shiftReg.value >= BigInt(0) &&
-      0 <= regNexts.cnt.value && regNexts.cnt.value <= len &&
-      in1 == in2 * regNexts.ghost_q * Pow2(len - regNexts.cnt.value) + regNexts.ghost_r &&
-      regNexts.ghost_r == regNexts.shiftReg.value / Pow2(regNexts.cnt.value + 1) &&
-      regNexts.shiftReg.value == regNexts.ghost_q + regNexts.ghost_r * Pow2(regNexts.cnt.value + 1) &&
-      (!(regs.cnt.value == (len - 1)) || (regNexts.state.value == BigInt(4))) &&
-      (!(regs.cnt.value < (len - 1)) || (regNexts.state.value == BigInt(3)))
-    )
+    regNexts.cycle == regs.cycle + 1 &&
+    regNexts.cnt.value == regs.cnt.value + 1 && 
+    !preCond_compt(inputs, regs) || (
+      (!(regs.cnt.value == (len - 1)) || preCond_finish(inputs, regNexts)) && 
+        (!(regs.cnt.value < (len - 1)) || preCond_compt(inputs, regNexts)))
   }
-
+  @library
   def preCond_finish(inputs: DividerInputs, regs: DividerRegs): Boolean = {
     regs.state.value == BigInt(4) && inputs.io_out_ready.value == true &&
     regs.cnt.value == len &&
     inputs.io_in_bits_0.value == inputs.io_in_bits_1.value * regs.shiftReg.value % Pow2(len) + regs.shiftReg.value / Pow2(len + 1) 
   }
+  @library
   def postCond_finish(inputs: DividerInputs, regs: DividerRegs, regNexts: DividerRegs, outputs: DividerOutputs): Boolean = {
+    val in1 = inputs.io_in_bits_0.value
+    val in2 = inputs.io_in_bits_1.value
     !(regs.state.value == BigInt(4)) || (
       regNexts.cnt.value == len &&
       regNexts.state.value == BigInt(0) &&
       outputs.io_out_bits.value / Pow2(len) == regs.shiftReg.value / Pow2(len + 1) &&
-      outputs.io_out_bits.value % Pow2(len) == regs.shiftReg.value % Pow2(len)
+      outputs.io_out_bits.value % Pow2(len) == regs.shiftReg.value % Pow2(len) &&
+      in1 == in2 * outputs.io_out_bits(len - 1, 0).value + outputs.io_out_bits(2 * len - 1, len).value
     )
   }
 
@@ -240,7 +242,7 @@ case class Divider(len: BigInt = 64) {
   }.ensuring(_ => inputs.io_in_bits_1.value * ghost_Q_next * Pow2(len - regs.cnt.value - 1) + ghost_R_next 
       == inputs.io_in_bits_0.value)
 
-  @opaque @library
+  @opaque 
   def lemma_shiftReg_range(shiftReg: BigInt, cnt: BigInt, len: BigInt): Unit = {
       require(len >= BigInt(1))
       require(cnt >= BigInt(0) && cnt <= len - 1)
@@ -255,6 +257,7 @@ case class Divider(len: BigInt = 64) {
         Pow2(len - cnt - 1) * hl + ll / Pow2(cnt + 1)                   ==:| trivial |:
         shiftReg / Pow2(len) * Pow2(len - cnt - 1) + ll / Pow2(cnt + 1)        
       }.qed
+      // Pow2.Pow2Mul(len, cnt + 1, len - cnt - 1)
   }.ensuring(_ => shiftReg / Pow2(cnt + 1) >= shiftReg / Pow2(len) * Pow2(len - cnt - 1))
 
   // check again
@@ -379,7 +382,7 @@ case class Divider(len: BigInt = 64) {
     // require(a.width == len)
     val s = (a((len - 1)) && sign)
     (s, Mux(s, -a, a))
-  }
+  } ensuring(res => res._2.value >= 0)
 
   @library
   def trans(inputs: DividerInputs, regs: DividerRegs): (DividerOutputs, DividerRegs) = {
@@ -418,9 +421,14 @@ case class Divider(len: BigInt = 64) {
     val lo = regs.shiftReg((len - 1), 0)
     val (aSign, aVal) = abs(a, inputs.io_sign)
     val (bSign, bVal) = abs(b, inputs.io_sign)
+    assert(aVal.value >= 0 && bVal.value >= 0)
 
     // if b.length >= a.length, canSkipShift >= len - 1
     val canSkipShift = ((Lit(len).U + Log2(regs.bReg)) - Log2(regs.aValx2Reg))
+    assert(regs.aValx2Reg.value < Pow2(len + 1) && regs.aValx2Reg.value >= 0)
+    Log2.lemma_Log2LePow2(regs.aValx2Reg, len + 1)
+    assert(Log2(regs.aValx2Reg).value <= len)
+    assert(canSkipShift.value >= 0)
     val enough = (hi.asUInt >= regs.bReg.asUInt)
     assert(enough.value == (hi.value >= regs.bReg.value))
     val r = hi(len, 1)
@@ -447,9 +455,29 @@ case class Divider(len: BigInt = 64) {
     } else if (when((regs.state === s_log2))) {
       cnt_next = cnt_next := Mux(divBy0, Lit(0).U, Mux((canSkipShift >= Lit((len - 1)).U), Lit((len - 1)).U, canSkipShift))
       state_next = state_next := s_shift
+      assert(cnt_next.value >= 0)
     } else if (when((regs.state === s_shift))) {
       shiftReg_next = shiftReg_next := (regs.aValx2Reg << regs.cnt)
       state_next = state_next := s_compute
+      
+      // proof state == s_shift -> preCond_compute
+      assert(shiftReg_next.value >= 0)
+      assert(0 <= cnt_next.value && cnt_next.value < len)
+      ghost_r_next = aVal.value
+      ghost_q_next = BigInt(0)
+      assert(0 <= ghost_r_next && 0 <= ghost_q_next)
+      assert(aVal.value == bReg_next.value * ghost_q_next * Pow2(len - regs.cnt.value) + ghost_r_next)
+      // regs.ghost_r == regs.shiftReg.value / Pow2(regs.cnt.value + 1)
+      {
+        shiftReg_next.value / Pow2(cnt_next.value + 1) ==:| trivial |:
+        (regs.aValx2Reg << regs.cnt).value / Pow2(cnt_next.value + 1) ==:| trivial |:
+        (regs.aValx2Reg.value * Pow2(regs.cnt.value)) / Pow2(cnt_next.value + 1) ==:| trivial |:
+        aVal.value * 2 * Pow2(cnt_next.value) / Pow2(cnt_next.value + 1) ==:| trivial |:
+        aVal.value * Pow2(cnt_next.value + 1) / Pow2(cnt_next.value + 1) ==:| trivial |:
+        aVal.value                                                       ==:| trivial |:
+        ghost_r_next
+      }.qed
+
     } else if (when((regs.state === s_compute))) {
       assert(preCond_compt(inputs, regs))
       // shiftReg_next = shiftReg_next := Cat(List(Mux(enough, (hi - regs.bReg), hi)((len - 1), 0), lo, enough))
@@ -527,56 +555,44 @@ case class Divider(len: BigInt = 64) {
         cycle_next
       )
 
-    val in1 = inputs.io_in_bits_0.value
-    val in2 = inputs.io_in_bits_1.value
-    assert(!(regs.state.value == BigInt(3)) || (
-      len > 0 &&
-      0 <= in1 && in1 < Pow2(len) &&
-      0 <= in2 && in2 < Pow2(len) &&
-      regNexts.bReg.value == in2 &&
-      regNexts.shiftReg.value >= BigInt(0) &&
-      0 <= regNexts.cnt.value && regNexts.cnt.value <= len
-    ))
-    assert(!(regs.state.value == BigInt(3)) || (
-      in1 == in2 * regNexts.ghost_q * Pow2(len - regNexts.cnt.value) + regNexts.ghost_r
-    ))
-    assert(!(regs.state.value == BigInt(3)) || (
-      regNexts.ghost_r == regNexts.shiftReg.value / Pow2(regNexts.cnt.value + 1)
-    ))
-    assert(!(regs.state.value == BigInt(3)) || (
-       regNexts.shiftReg.value == regNexts.ghost_q + regNexts.ghost_r * Pow2(regNexts.cnt.value + 1)
-    ))
-
     (outputs, regNexts)
   } ensuring { case (outputs, regNexts) =>
     outputsRequire(outputs) && regsRequire(regNexts) && postCond(inputs, regs, regNexts, outputs)
   }
 
+  @library
   def outputsProp(inputs: DividerInputs, regs: DividerRegs, outputs: DividerOutputs): Boolean = {
     val in1 = inputs.io_in_bits_0.value
     val in2 = inputs.io_in_bits_1.value
-    len > 0 &&
     in1 == in2 * outputs.io_out_bits(len - 1, 0).value + outputs.io_out_bits(2 * len - 1, len).value
   }
-
-  def dividerRun(inputs: DividerInputs, regInit: DividerRegs): (DividerOutputs, DividerRegs) = {
+  
+  @library
+  def dividerRun(inputs: DividerInputs, regInit: DividerRegs, outputs: DividerOutputs): (DividerOutputs, DividerRegs) = {
     require(inputsRequire(inputs) && regsRequire(regInit))
     require(preCond(inputs, regInit))
     decreases(2 * len - regInit.cycle)
     val (newOutputs, newRegs) = trans(inputs, regInit)
-    assert(newRegs.cnt.value <= len)
-    if (newRegs.cnt.value <= len - 1) {
-      dividerRun(inputs, newRegs)
+    // assert(postCond(inputs, regInit, newRegs, newOutputs))
+    assert(regInit.cnt.value <= len)
+    if (regInit.cnt.value <= len - 1) {
+      dividerRun(inputs, newRegs, newOutputs)
     } else {
-      assert(newRegs.cnt.value == len)
+      /* 
+       * else branch: 
+       * last cycle is the final cycle of s_compute,
+       * at the start of this cycle: regInit.cnt == len, regInit.state == s_finish
+       * we get the expected output at this cycle
+       */
+      assert(regInit.cnt.value == len)  
       (newOutputs, newRegs)
     }
-  // } ensuring { case (outputs, regNexts) =>
-  //   outputsRequire(outputs) && regsRequire(regNexts) && outputsProp(inputs, regNexts, outputs)
+  // } ensuring { case (newOutputs, regNexts) =>
+  //   outputsRequire(newOutputs) && regsRequire(regNexts) && outputsProp(inputs, regNexts, newOutputs)
   }
 
-  @ignore
-  def run(inputs: DividerInputs, randomInitValue: DividerRegs): (DividerOutputs, DividerRegs) = {
+  @library
+  def run(inputs: DividerInputs, randomInitValue: DividerRegs, outputs: DividerOutputs): (DividerOutputs, DividerRegs) = {
     require(inputsRequire(inputs) && regsRequire(randomInitValue))
     val regInit = DividerRegs(
       Lit(0, 3).U,
@@ -590,8 +606,8 @@ case class Divider(len: BigInt = 64) {
       randomInitValue.ghost_q,
       randomInitValue.cycle
     )
-    dividerRun(inputs, regInit)
+    dividerRun(inputs, regInit, outputs)
   } ensuring { case (outputs, regNexts) =>
-    outputsRequire(outputs) && regsRequire(regNexts)
+    outputsRequire(outputs) && regsRequire(regNexts) && outputsProp(inputs, regNexts, outputs)
   }
 }
