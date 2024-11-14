@@ -80,6 +80,48 @@ def SumZ(l: List[BigInt]): BigInt = {
 } ensuring(res => res >= 0)
 
 @library
+def lemma_listCat_positive(l: List[BigInt], l1: List[BigInt], l2: List[BigInt]): Unit = {
+  require(l == l1 ++ l2)
+  require(l1.forall(_ >= BigInt(0)))
+  require(l2.forall(_ >= BigInt(0)))
+  l1 match {
+    case Cons(h, t) => {
+      assert(l == h :: (t ++ l2))
+      assert(h >= 0)
+      lemma_listCat_positive(t ++ l2, t, l2)
+      assert(l.forall(_ >= BigInt(0))) 
+    }
+    case Nil() => {
+      assert(l == l2)
+      assert(l.forall(_ >= BigInt(0)))
+    }
+  }
+} ensuring(_ => l.forall(_ >= BigInt(0)))
+
+// @library
+def lemma_SumZ_take(l: List[BigInt], l1: List[BigInt], l2: List[BigInt]): Unit = {
+  require(l == l1 ++ l2)
+  require(l1.forall(_ >= BigInt(0)))
+  require(l2.forall(_ >= BigInt(0)))
+  lemma_listCat_positive(l, l1, l2)
+  assert(l.forall(_ >= BigInt(0)))
+  l1 match {
+    case Cons(h, t) => {
+      SumZ(l) ==:| trivial |:
+      SumZ(h :: (t ++ l2)) ==:| trivial |:
+      h + SumZ(t ++ l2) ==:| lemma_SumZ_take(t ++ l2, t, l2) |:
+      h + SumZ(t) + SumZ(l2) ==:| trivial |:
+      SumZ(l1) + SumZ(l2)
+    }.qed
+    case Nil() => {
+      SumZ(l) ==:| trivial |:
+      BigInt(0) + SumZ(l2) ==:| trivial |:
+      SumZ(l1) + SumZ(l2)
+    }.qed
+  }
+}.ensuring(_ => SumZ(l) == SumZ(l1) + SumZ(l2))
+
+@library
 def lemma_Sum_take(l: List[Boolean], l1: List[Boolean], l2: List[Boolean]): Unit = {
   require(l == l1 ++ l2)
   l1 match {
